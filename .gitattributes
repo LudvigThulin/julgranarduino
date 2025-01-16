@@ -1,2 +1,140 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+/*
+* Name: Automatisk vattningsssystem
+* Author: Ludvig Thulin
+* Date: 2025-01-16
+* Description: Projektet använder en pump som pumpar ut vatten. Projektet använder en LCD skärm för att visa vattenivån,klocka och senastevattning. 
+*/
+
+#include <DS3231.h> // Bibliotek Klocka
+#include <Wire.h> 
+#include <LCD-I2C.h> // Bibliotek Skärm
+
+LCD_I2C lcd(0x27, 20, 4); // Typ Av Skärm
+
+DS3231 myRTC; //Varibler klocka
+bool century = false;
+bool h12Flag;
+bool pmFlag;
+byte alarmDay, alarmHour, alarmMinute, alarmSecond, alarmBits;
+bool alarmDy, alarmH12Flag, alarmPmFlag;
+float w_level = 0; //Vattenivån 
+String senastevattning;
+
+void setup() {
+  Wire.begin();
+  Serial.begin(9600);
+
+  lcd.begin(&Wire);
+  lcd.display();
+  lcd.backlight();
+
+  pinMode(8,OUTPUT);
+  digitalWrite(8,LOW);
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly
+  w_level = vattennivan();
+
+Serial.println(w_level);
+  if (w_level < 25.0 ) {
+    senastevattning = pump(1);
+    Serial.println("pump på");
+  }
+  else {
+    pump(0);
+  }
+  LCD(w_level, senastevattning);
+  delay(1500);
+}
+
+float vattennivan(){ //Läser av vattenivån och retunerar värdet i millimeter 
+  int analogNummer = 0;
+
+  for (int i=1; i<=10; i++) {   // Beräknar medelvärdet för ett sabilare värde
+    analogNummer = analogNummer + analogRead(A0);
+    delay(10);
+  }
+
+  analogNummer = analogNummer / 10;
+  analogNummer = analogNummer / 4;  //Minskar upplösningen
+
+  float c;
+    if (analogNummer > 100 ) {
+      c = (analogNummer-100)*0.7;
+    }
+    else { 
+      c=0;
+    }  
+  return c;
+}
+
+void LCD (float v, String sv) { //Skriver ut datumet med tid
+  lcd.setCursor(0,0);
+  lcd.print("Date:");
+  if (myRTC.getDate() <= 9) {
+    lcd.setCursor(7,0);
+  }
+  else {
+    lcd.setCursor(6,0);
+  }
+  lcd.print(myRTC.getDate());
+  lcd.setCursor(8,0);
+  lcd.print("/");
+  lcd.setCursor(9,0);
+  lcd.print(myRTC.getMonth(century));
+
+  if (myRTC.getHour(h12Flag, pmFlag) <= 9) {  // Flyttar till rätt läge om timman är 0-9
+    lcd.setCursor(13,0);
+    lcd.print(myRTC.getHour(h12Flag, pmFlag));
+  }
+  else {
+    lcd.setCursor(12,0);
+    lcd.print(myRTC.getHour(h12Flag, pmFlag));
+  }
+
+  lcd.setCursor(14,0);
+  lcd.print(":"); 
+
+  if (myRTC.getMinute() <= 9) { // Flyttar till rätt läge om minuterna är 0-9
+    lcd.setCursor(15,0);
+    lcd.print("0");
+    lcd.setCursor(16,0);
+    lcd.print(myRTC.getMinute());
+  } 
+  else {
+    lcd.setCursor(15,0);
+    lcd.print(myRTC.getMinute());
+  }
+
+  //Skriver ut vattennivån
+  lcd.setCursor(0,2);
+  lcd.print("Waterlevel:");
+  lcd.setCursor(12,2);
+  lcd.print(v);
+  lcd.setCursor(16,2);
+  lcd.print("mm");
+
+  //Skriver ut senaste vattningen
+  lcd.setCursor(0,3);
+  lcd.print("Latest:");
+  lcd.setCursor(8,3);
+  lcd.print(sv);
+}
+
+String pump(bool k){   //Sätter igång pumpen och/eller stänger av pumpen, skriver ut senaste datumet pumpen vatr aktierad.
+  String s;
+  if (k == 1){
+    digitalWrite(8, HIGH);
+    s = s + String(myRTC.getDate()) + "/";
+    s = s + String(myRTC.getMonth(century)) + " ";
+    s = s + String(myRTC.getHour(h12Flag, pmFlag)) + ":";
+    s = s + String(myRTC.getMinute());
+    return s;
+  }
+  else if (k==0) {
+    digitalWrite(8, LOW);
+    return s;
+  }
+}
